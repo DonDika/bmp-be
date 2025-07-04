@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  role        String    @default("user")
+  created_at  DateTime  @default(now())
+
+  material_requests Material_Request[]
+  purchase_orders   Purchase_Order[]
+
+  // Relasi ke approval PO
+  approved_purchase_orders Purchase_Order[] @relation("PurchaseOrderApprovals")
+
+  // Relasi ke approval DO
+  approve_delivery_orders Delivery_Order[] @relation("DeliveryOrderApprovals")
+}
+
+model Item {
+  id           String    @id @default(uuid())
+  name         String    
+  code         String    
+  part_number  String    @unique
+  created_at   DateTime  @default(now())
+
+  shelves      Shelf[]
+  request_items Material_Request_Item[]
+  igr_items     Incoming_Good_Receipt_Item[]
+}
+
+model Warehouse {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  location     String
+  contact      String
+  created_at   DateTime  @default(now())
+
+  shelves      Shelf[]
+}
+
+model Shelf {
+  id           String    @id @default(uuid())
+  location     String
+  position     String
+  stock_qty    Int
+  created_at   DateTime  @default(now())
+
+  item_id      String
+  item         Item      @relation(fields: [item_id], references: [id])
+
+  warehouse_id String
+  warehouse    Warehouse @relation(fields: [warehouse_id], references: [id])
+
+  igr_items    Incoming_Good_Receipt_Item[]
+
+  @@unique([location, position])
+}
+
+model Location {
+  id           String    @id @default(uuid())
+  name         String
+  code         String    @unique
+  created_at   DateTime  @default(now())
+
+  material_requests Material_Request[]
+}
+
+model Material_Request {
+  id           String                    @id @default(uuid())
+  no_mr        String                    @unique
+  status       String
+  remarks      String?
+  created_at   DateTime                  @default(now())
+
+  created_by_id String
+  created_by    User                     @relation(fields: [created_by_id], references: [id])
+
+  location_id   String
+  location      Location                 @relation(fields: [location_id], references: [id])
+
+  items         Material_Request_Item[]
+
+  purchase_order_id String?             
+  purchase_order    Purchase_Order?      @relation(fields: [purchase_order_id], references: [id])
+
+  delivery_orders Delivery_Order[]
+}
+
+model Material_Request_Item {
+  id           String   @id @default(uuid())
+  quantity     Int
+  duration     Int
+  status       String
+
+  item_id      String
+  item         Item     @relation(fields: [item_id], references: [id])
+
+  material_request_id String
+  material_request     Material_Request @relation(fields: [material_request_id], references: [id])
+
+  purchase_order_items Purchase_Order_Item[]
+
+  delivery_order_items Delivery_Order_Item[]
+}
+
+model Purchase_Order {
+  id             String               @id @default(uuid())
+  no_po          String               @unique
+  status         String
+  created_at     DateTime             @default(now())
+
+  created_by_id String
+  created_by    User                  @relation(fields: [created_by_id], references: [id])
+
+  material_requests Material_Request[]
+
+  items          Purchase_Order_Item[]
+
+  // Relasi satu-satu ke IGR
+  igr            Incoming_Good_Receipt?
+
+  // Approval dari admin
+  approvals      User[]               @relation("PurchaseOrderApprovals")
+}
+
+model Purchase_Order_Item {
+  id                    String               @id @default(uuid())
+  supplier              String
+  price                 Int?
+  quantity              Int
+  status                String
+
+  purchase_order_id     String
+  purchase_order        Purchase_Order       @relation(fields: [purchase_order_id], references: [id])
+
+  material_request_item_id String
+  material_request_item    Material_Request_Item @relation(fields: [material_request_item_id], references: [id])
+
+  igr_item        Incoming_Good_Receipt_Item[]
+
+  @@unique([purchase_order_id, material_request_item_id])
+}
+
+model Incoming_Good_Receipt {
+  id               String                  @id @default(uuid())
+  no_igr           String                  @unique
+  received_date    DateTime
+  remarks          String?
+  created_at       DateTime                @default(now())
+
+  // One-to-One ke PO
+  purchase_order_id String   @unique
+  purchase_order    Purchase_Order @relation(fields: [purchase_order_id], references: [id])
+
+  // Items yang diterima dalam IGR
+  items             Incoming_Good_Receipt_Item[]
+}
+
+model Incoming_Good_Receipt_Item {
+  id                      String   @id @default(uuid())
+  quantity                Int
+  status                  String   // received, pending, rejected
+  created_at              DateTime @default(now())
+
+  // Relasi ke IGR
+  igr_id                  String
+  igr                     Incoming_Good_Receipt @relation(fields: [igr_id], references: [id])
+
+  // Relasi ke PO Item (1 PO Item hanya bisa divalidasi 1 kali)
+  purchase_order_item_id  String
+  purchase_order_item     Purchase_Order_Item @relation(fields: [purchase_order_item_id], references: [id])
+
+  // Relasi ke Item
+  item_id                 String
+  item                    Item     @relation(fields: [item_id], references: [id])
+
+  // Relasi ke Shelf untuk update stock
+  shelf_id                String
+  shelf                   Shelf    @relation(fields: [shelf_id], references: [id])
+}
+
+model Delivery_Order {
+  id           String        @id @default(uuid())
+  no_do        String        @unique
+  status       String
+  remarks      String?
+  created_at   DateTime      @default(now())
+
+  material_request_id String
+  material_request     Material_Request @relation(fields: [material_request_id], references: [id])
+
+  // DO punya banyak item
+  items Delivery_Order_Item[]
+
+  // Approval dari admin
+  approvals      User[]               @relation("DeliveryOrderApprovals")
+}
+
+
+model Delivery_Order_Item {
+  id                      String                  @id @default(uuid())
+  quantity                Int
+  created_at              DateTime                @default(now())
+
+  // Relasi ke DO
+  delivery_order_id       String
+  delivery_order          Delivery_Order          @relation(fields: [delivery_order_id], references: [id])
+
+  // Relasi ke MR Item
+  material_request_item_id String
+  material_request_item    Material_Request_Item  @relation(fields: [material_request_item_id], references: [id])
+}

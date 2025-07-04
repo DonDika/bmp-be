@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Prisma files (optional, tergantung kebutuhan)
+prisma/.env
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# Mac system files
+.DS_Store
+
+# VSCode settings (optional)
+.vscode/
